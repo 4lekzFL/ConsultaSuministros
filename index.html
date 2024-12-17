@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Suministros</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            padding: 10px;
+        }
+
+        select, button {
+            padding: 10px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table th, table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        table th {
+            background-color: #f4f4f4;
+        }
+
+        .error-section {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #ffe6e6;
+            color: #b00;
+            border: 1px solid #b00;
+        }
+
+        .error-section ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .buttons {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Consulta de Suministros</h1>
+    <textarea id="inputCodes" placeholder="Ingrese los códigos de suministro, uno por línea..."></textarea>
+
+    <div>
+        <select id="supplyType">
+            <option value="agua">Agua (Sedachimbote)</option>
+            <option value="luz">Luz (Hidrandina)</option>
+        </select>
+        <button id="loadCodes">Cargar</button>
+    </div>
+
+    <div class="buttons">
+        <button id="exportTable">Exportar a CSV</button>
+        <button id="clearTable">Borrar Tabla</button>
+    </div>
+
+    <table id="resultTable">
+        <thead>
+        <tr>
+            <th>Código</th>
+            <th>Fecha de Emisión</th>
+            <th>Fecha de Vencimiento</th>
+            <th>Consumo</th>
+            <th>Importe</th>
+        </tr>
+        </thead>
+        <tbody>
+        <!-- Las filas se generarán dinámicamente -->
+        </tbody>
+    </table>
+
+    <div class="error-section" id="errorSection" style="display: none;">
+        <h3>Códigos sin resultados:</h3>
+        <ul id="errorList">
+            <!-- Los errores se agregarán dinámicamente -->
+        </ul>
+    </div>
+</div>
+
+<script>
+    // Servicio de consulta de suministros
+    class SuministrosService {
+        static async consultarSuministro(codigo) {
+            const url = 'http://170.231.83.91/consultaweb/';
+            const datos = {
+                codigo: codigo,
+                'btn-login': 'Consultar'
+            };
+
+            try {
+                const respuesta = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+                        'Access-Control-Allow-Headers' : 'Content-Type',
+
+            },
+                    body: new URLSearchParams(datos)
+                });
+
+                if (!respuesta.ok) {
+                    throw new Error(`Error HTTP: ${respuesta.status}`);
+                }
+
+                return await respuesta.text();
+            } catch (error) {
+                console.error('Error en la consulta:', error);
+                throw error;
+            }
+        }
+
+        static extraerDatosRecibo(htmlRespuesta) {
+            // Crear un elemento temporal para parsear el HTML
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlRespuesta, 'text/html');
+
+            // Extraer datos de la primera fila de recibos
+            const tablaRecibos = doc.querySelector('.table-hover');
+            if (!tablaRecibos) {
+                throw new Error('No se encontró la tabla de recibos');
+            }
+
+            const primeraFila = tablaRecibos.querySelector('tbody tr');
+            if (!primeraFila) {
+                throw new Error('No hay filas en la tabla de recibos');
+            }
+
+            return {
+                fechaEmision: primeraFila.cells[3].textContent.trim(),
+                fechaVencimiento: doc.getElementById('fechavencmto').value,
+                consumo: primeraFila.cells[6].textContent.trim() + " m³",
+                importe: "S/ " + primeraFila.cells[7].textContent.trim()
+            };
+        }
+    }
+
+    document.getElementById('loadCodes').addEventListener('click', () => {
+        const input = document.getElementById('inputCodes').value.trim();
+        const supplyType = document.getElementById('supplyType').value;
+        const tableBody = document.getElementById('resultTable').querySelector('tbody');
+        const errorSection = document.getElementById('errorSection');
+        const errorList = document.getElementById('errorList');
+
+        // Limpiar errores previos
+        errorList.innerHTML = '';
+        errorList.innerHTML = '';
+        errorSection.style.display = 'none';
+
+        // Limpiar el área de texto
+        document.getElementById('inputCodes').value = '';
+
+        // Procesar códigos ingresados
+        const codes = input.split('\n').filter(code => code.trim() !== '');
+
+        if (codes.length === 0) {
+            alert('Por favor, ingrese al menos un código.');
+            return;
+        }
+
+        codes.forEach(code => {
+            const row = document.createElement('tr');
+
+            // Crear celdas vacías inicialmente
+            row.innerHTML = `
+                    <td>${code}</td>
+                    <td colspan="4">Cargando...</td>
+                `;
+
+            tableBody.appendChild(row);
+
+            // Simulación de consulta: aquí integrarás la lógica de scraping más adelante
+            setTimeout(() => {
+                try {
+                    const htmlRespuesta = SuministrosService.consultarSuministro(code);
+                    const datosRecibo = SuministrosService.extraerDatosRecibo(htmlRespuesta);
+                    row.innerHTML = `
+                            <td>${code}</td>
+                            <td>${datosRecibo.fechaEmision}</td>
+                            <td>${datosRecibo.fechaVencimiento}</td>
+                            <td>${datosRecibo.consumo}</td>
+                            <td>${datosRecibo.importe}</td>
+                        `;
+                } catch (error) {
+                    errorSection.style.display = 'block';
+                    const li = document.createElement('li');
+                    li.textContent = code;
+                    errorList.appendChild(li);
+                    row.innerHTML = `<td>${code}</td><td colspan="4">Sin resultados</td>`;
+                }
+            }, Math.random() * 2000 + 500); // Simula una consulta asíncrona con retardo
+        });
+    });
+
+    document.getElementById('clearTable').addEventListener('click', () => {
+        document.getElementById('resultTable').querySelector('tbody').innerHTML = '';
+    });
+
+    document.getElementById('exportTable').addEventListener('click', () => {
+        const rows = Array.from(document.querySelectorAll('#resultTable tbody tr'));
+        if (rows.length === 0) {
+            alert('No hay datos para exportar.');
+            return;
+        }
+
+        const csvContent = rows.map(row => {
+            return Array.from(row.children).map(cell => cell.textContent).join(',');
+        }).join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'suministros.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+</script>
+</body>
+</html>
